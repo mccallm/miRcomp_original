@@ -1,0 +1,13 @@
+Package: miRcomp
+Version: 0.99.0
+Date: 2015-07-31
+Title: Tools to assess and compare miRNA expression estimatation methods
+Description: Based on a large miRNA dilution study, this package provides tools to read in the raw amplification data and use these data to assess the performance of methods that estimate expression from the amplification curves.
+Author: Matthew N. McCall <mccallm@gmail.com>
+Maintainer: Matthew N. McCall <mccallm@gmail.com>
+Depends: R (>= 3.1.0), Biobase (>= 2.22.0)
+Imports: utils, methods
+VignetteBuilder: knitr
+Suggests: BiocStyle, knitr, rmarkdown, RUnit, BiocGenerics
+License: GPL-3
+biocViews: Software, qPCR, Preprocessing, QualityControl

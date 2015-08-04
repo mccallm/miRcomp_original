@@ -1,0 +1,234 @@
+---
+title: "Assessment and comparison of miRNA expression estimation methods (miRcomp)"
+author: "[Matthew N. McCall](http://mnmccall.com)"
+date: "`r Sys.Date()`"
+vignette: >
+  %\VignetteIndexEntry{Assessment and comparison of miRNA expression estimation methods (miRcomp)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}  
+output: 
+  BiocStyle::html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+In this vignette we demonstrate the functionality of the `r Biocpkg("miRcomp")` package. This package uses data from a dilution / mixture experiment to assess methods that estimate microRNA expression from qPCR amplification curves. Specifically, this package provides assessments of accuracy, precision, data quality, titration response, limit of detection, and complete features. Each of these is described in the following sections. To avoid any confusion due to naming conventions (expression estimates from amplification curves have been called Ct values, Crt values, and Cq values to name a few), we refer to the reported values as *expression estimates* or simply *expression*.
+
+## Background
+
+Life Technologies has designed a qPCR miRNA array panel to work within their TaqMan® OpenArray® system. The current version of the array has coverage for 754 human miRNAs and additional non-human miRNAs for normalization controls/spike-ins across two primer pools. For raw data analysis, LifeTechnologies uses a closed ExpressionSuite software package to analyze qPCR data. There are a number of previously developed open-source packages to analyze raw qPCR fluorescence data; however, unlike microarray and RNAseq data, raw qPCR data are typically analyzed using the manufacturer’s software. In fact, several open-source packages take expression values (e.g. Ct, Crt, or Cq values) as input, ignoring how these values were estimated. To assess the potential benefits of alternative expression measures, we developed `r Biocpkg("miRcomp")`, a benchmark data set and R/Bioconductor package to facilitate the development of new algorithms to preprocess LifeTechnologies® OpenArray® miRNA data and to provide tools to integrate the data into other software packages from the Bioconductor tool set.
+
+## Experimental Design
+
+Two separate RNA pools were prepared by blending two tissues each: (1) kidney and placenta and (2) skeletal muscle and brain (frontal cortex). These sources of RNA were chosen based on prior analyses suggesting that the majority of microRNAs are expressed in at least one of these tissues and that several microRNAs are unique to each pool (e.g. miR-133a for skeletal muscle and the chromosome 19 miRNA cluster for placenta). We extracted RNA from formaldehyde-fixed, paraffin-embedded (FFPE) sections using the AllPrep DNA/RNA FFPE protocol (Qiagen). Mixtures of RNA were made by combining equal masses of kidney and placenta or skeletal muscle and frontal cortex RNA, respectively, and diluting to equal concentration of 3.3 ng/ul. 10 ng of RNA was used as the input for reverse transcription using the 'A' and 'B' primer pools and following the Life Technologies Open Array protocol modification for low-concentration, FFPE RNA. Separate reverse transcription and pre-amplification reactions were performed for the Life Technologies MegaPlex Pools 'A' and 'B' primer pools. Following pre-amplification, 30 ul from the 'A' and 'B' reactions for both pools were mixed with 570 ul of 0.1x TE. Further dilutions and combinations of the pools were then prepared according to the following design:
+
+![Experimental Design](design.png)
+
+Each of the 10 unique mixture / dilution sample types was performed four times.
+
+# Example Assessment
+
+## Data Sets
+
+In the following, we will use two data sets included in the `r Biocpkg("miRcomp")` package. The first was generated using the LifeTech ExpressionSuite software package. The second was generated using the default algorithm from the `r CRANpkg("qpcR")` R package. 
+
+We first load the package and data.
+
+```{r load_miRcomp}
+## Load libraries
+library('miRcomp')
+```
+
+```{r load_example_data}
+data(lifetech)
+data(qpcRdefault)
+```
+
+Each of the example data sets includes both an expression estimate (ct) and an assessment of the quality of each estimate (qc) for each of the 
+`r nrow(lifetech$ct)` microRNAs and `r ncol(lifetech$ct)` samples. For the *lifetech* data set, the measure of quality is the AmpScore (a proprietary method of assessing the quality of an amplification curve). For the *qpcRdefault* data set, the measure of quality is the R^2^ value from the sigmoidal model fit to the amplification curve data.
+
+```{r data_str}
+str(lifetech)
+str(qpcRdefault)
+```
+
+The colnames of the example data matrices correspond to the sample types shown in the design figure above. Each name starts with KW, followed by the sample type (1-10), then a colon and the replicate number (1-4).  
+
+```{r colnames}
+colnames(lifetech$ct)
+```
+
+## Quality Assessment
+We begin by examing the quality scores provided by each of the example methods. The *qualityAssessment* function allows one to examine the relationship between quality scores and expression estimates (`plotType="scatter"`) or the distribution of quality scores across samples (`plotType="boxplot"`).
+
+```{r quality_scatter}
+qualityAssessment(lifetech, plotType="scatter", label1="LifeTech AmpScore")
+```
+
+```{r quality_boxplot}
+qualityAssessment(lifetech, plotType="boxplot", label1="LifeTech AmpScore")
+```
+
+In addition to assessing a single method, one has the option to compare two methods by passing an optional second data object to the function. For the scatter plot, this results in plotting the quality metrics against each other. For the boxplots, the results are simply presented in a single figure. One also has the option to apply the complementary log-log transformation to the quality metrics prior to plotting (e.g. `cloglog2=TRUE`). This is often useful for R^2^ quality metrics. 
+
+```{r quality_scatter2}
+qualityAssessment(lifetech, object2=qpcRdefault, cloglog2=TRUE, plotType="scatter", label1="LifeTech AmpScore", label2="qpcR R-squared")
+```
+
+Finally, one can filter quality scores corresponding to NA expression estimates from the boxplots. This can be useful to focus on cases in which the expression estimates appear valid but may be of poor quality. 
+
+```{r quality_boxplot_na}
+qualityAssessment(lifetech, plotType="boxplot", na.rm=TRUE, label1="LifeTech AmpScore")
+```
+
+## Complete Features
+Given the difficulty in measuring many microRNAs, we examine the number of complete features (here microRNAs). Complete features are ones that are detected (non-NA expression estimate) and good quality across all `r ncol(lifetech$ct)` samples. The *completeFeatures* function allows one to assess a single method or compare two methods.
+
+```{r complete_features}
+completeFeatures(lifetech, qcThreshold1=1.25, label1="LifeTech")
+```
+
+```{r complete_features2}
+completeFeatures(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, label1="LifeTech", label2="qpcR")
+```
+
+One can also use this function to compare two quality thresholds for the same expression estimates. 
+
+```{r complete_features3}
+completeFeatures(lifetech, qcThreshold1=1.25, object2=lifetech, qcThreshold2=1.4, label1="LT 1.25", label2="LT 1.4")
+```
+
+## Limit of Detection
+We also directly examine the limit of detection for a given method. While this is related to the previous assessment, here the focus is on determining the minimum signal that can be reliably detected. This is accomplished in three ways: examining the distribution of average observed expression stratfied by the proportion of values within a set of replicates that are good quality (`plotType="boxplot"`), plotting the average observed expression in the two low input sample types (9 & 10) vs the expected expression (`plotType="scatterplot"`), or plotting the difference between the average observed expression in the two low input sample types and the expected expression vs the expected expression (`plotType="MAplot"`). The expected expression for both low input sample types (9 & 10) can be calculated based on the pure sample types (1 & 5) or, in the case of the 0.01/0.01 dilution (sample type 10), it can be calculated based on the expression in the 0.1/0.1 dilution (sample type 9).
+
+```{r limit_detect_boxplot}
+par(mar=c(6,6,2,2))
+boxes <- limitOfDetection(lifetech, qcThreshold=1.25, plotType="boxplot")
+str(boxes)
+```
+
+```{r limit_detect_scatter}
+par(mfrow=c(1,3))
+lods <- limitOfDetection(lifetech, qcThreshold=1.25, plotType="scatter")
+```
+
+```{r limit_detect_maplot}
+par(mfrow=c(1,3))
+lods <- limitOfDetection(lifetech, qcThreshold=1.25, plotType="MAplot")
+print(round(lods,digits=2))
+```
+
+In all three cases, the function also returns additional information. For `plotType="boxplot"` the function returns the values in each box. For the other two plotTypes, the function returns several potential limits of detection. Specifically, it returns a matrix with three columns corresponding to the three figures and three rows corresponding to the median difference between the observed and expected values. The values in the matrix are the expected expression values such that the median absolute difference for all larger expected expression values is approximately equal to the threshold for that row. For example, in the output shown above, if we focus on the 0.1/0.1 vs 0.01/0.01 comparison (column 3) and set a median average difference threshold of less than 1.00 (row 3), our estimate of the limit of detection is approximately 29.2.
+
+## Titration Response
+We now turn to assessments of the expression estimates themselves. Perhaps the most straight-forward assessment of a dilution experiment is the titration response, which features a consistent increase in expression with increasing amounts of input RNA. The *titrationResponse* function allows one to assess a single method or compare two methods. The output is a table displaying the number of features that show a titration response (monotone increasing expression as the input RNA increases). Here we use samples 2-4 and 6-8 as two separate titration series. The function also produces a figure showing the titration response stratified by the difference in expression between the sample being titrated and the sample being held constant. For example, in the sample type 2-4 titration series, mixture component A is held constant and mixture component B is titrated. To assess the difference in expression between mixture components A and B, we use the expression estimates in the pure sample types: sample type 1 (pure A) and sample type 5 (pure B). 
+
+```{r titration_response}
+titrationResponse(lifetech, qcThreshold1=1.25)
+```
+
+```{r titration_response2}
+titrationResponse(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, label1="LifeTech", label2="qpcR")
+```
+
+Note that the number features included in the assessment differs between the two tables shown above. This is due to the fact that when comparing two methods, a given feature must be of acceptable quality according to both methods (by default). However, one can remove this constraint by setting *commonFeatures=FALSE*.  
+
+```{r titration_response3}
+titrationResponse(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, commonFeatures=FALSE, label1="LifeTech", label2="qpcR")
+```
+
+Finally, one can also compare two quality thresholds for the same expression estimates by passing the same object twice and setting two different quality thresholds. Clearly, *commonFeatures* must be set to FALSE when comparing two quality thresholds for the same expression estimates.
+
+```{r titration_response4}
+titrationResponse(lifetech, qcThreshold1=1.25, object2=lifetech, qcThreshold2=1.4, commonFeatures=FALSE, label1="AmpScore 1.25", label2="AmpScore 1.4")
+```
+
+## Accuracy
+Related to the titration response is the accuracy of the expression estimates. Rather than simply requiring montone increasing expression estimates in response to increasing input RNA, here we are interested in the actual magnitude of the increase in expression. Specifically, to assess accuracy, we calculate the signal detect slope: the slope of the regression line of observed expression on expected expression. The ideal signal detect slope is one, representing agreement between observed and expected expression. Like many of the previous assessment functions, the *accuracy* function allows one to assess a single method or compare two methods. In both situations, the signal detect slopes are stratified by pure sample expression. Points in the figures below are grey if the signal detect slope is not statistically signficantly different from zero. As such, a grey point corresponding to a signal detect slope well above zero represents a particularly noisy (large residual variance) response. 
+
+```{r accuracy}
+accuracy(lifetech, qcThreshold1=1.25)
+```
+
+```{r accuracy2}
+accuracy(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, label1="LifeTech", label2="qpcR")
+```
+
+Similar to the titration response assessment, by default the accuracy function only considers features considered high quality based on both methods. However, this constraint can be removed by setting *commonFeatures=FALSE*.  
+
+```{r accuracy3}
+accuracy(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, commonFeatures=FALSE, label1="LifeTech", label2="qpcR")
+```
+
+Finally, one can also compare two quality thresholds for the same expression estimates by passing the same object twice and setting two different quality thresholds. Clearly, *commonFeatures* must be set to FALSE when comparing two quality thresholds for the same expression estimates.
+
+```{r accuracy4}
+accuracy(lifetech, qcThreshold1=1.25, object2=lifetech, qcThreshold2=1.4, commonFeatures=FALSE, label1="AmpScore 1.25", label2="AmpScore 1.4")
+```
+
+## Precision
+Finally, we consider two measures of precision, the within-replicate standard deviation and coefficient of variation. The latter is calculated as the within-replicate standard deviation divided by the within-replicate mean. Both statistics are calculated for each set of replicates (unique feature / sample type combination) that are of good quality and stratified by the observed expression. 
+
+```{r precision_sd}
+boxes <- precision(lifetech, qcThreshold1=1.25, statistic="sd")
+str(boxes)
+```
+
+```{r precision_cv}
+boxes <- precision(lifetech, qcThreshold1=1.25, statistic="cv", bins=4)
+str(boxes)
+```
+
+At times it can be beneficial to look at a scaled version of either the standard deviation or coefficient of variation. This can be easily accomplished by using `scale="log"` or `scale="log10"`.
+
+```{r precision_sd2}
+boxes <- precision(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, scale="log", label1="LifeTech", label2="qpcR")
+str(boxes)
+```
+
+```{r precision_cv2}
+boxes <- precision(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, statistic="cv", scale="log10", label1="LifeTech", label2="qpcR")
+str(boxes)
+```
+
+Similar to the titration response assessment, by default the accuracy function only considers features considered high quality based on both methods. However, this constraint can be removed by setting *commonFeatures=FALSE*.  
+
+```{r precision_cv3}
+boxes <- precision(lifetech, qcThreshold1=1.25, object2=qpcRdefault, qcThreshold2=0.99, commonFeatures=FALSE, statistic="cv", scale="log10", label1="LifeTech", label2="qpcR")
+str(boxes)
+```
+
+Finally, one can also compare two quality thresholds for the same expression estimates by passing the same object twice and setting two different quality thresholds. Clearly, *commonFeatures* must be set to FALSE when comparing two quality thresholds for the same expression estimates.
+
+```{r precision_cv4}
+boxes <- precision(lifetech, qcThreshold1=1.25, object2=lifetech, qcThreshold2=1.4, commonFeatures=FALSE, statistic="cv", scale="log10", label1="AmpScore 1.25", label2="AmpScore 1.4")
+str(boxes)
+```
+
+# Assessing a New Method
+So far we have focused on assessing two data sets that are available as part of the `r Biocexptpkg("miRcomp")` package. However, miRcomp was designed to allow researchers to develop their own expression estimation algorithm and compare it to the algorithms available in the LifeTech Expression Suite and the `r CRANpkg("qpcR")` R package. The novel benchmark data set described in the Experimental Design section and provided in the `r Biocexptpkg("miRcompData")` package provides a rich resource for novel methods development. We anticipate that this package will facilitate the comparison of competing algorithms and guide the selection of those most suitable for a specific experiment. Furthermore, we predict that the development of open-source software to estimate expression from the raw amplification data will lead to increased intergration between expression estimation and subsequent statistical analyses, typically performed with currently available R/Bioconductor tools.
+
+Whenever possible, we will include the expression estimates and quality metrics from new algorithms in the `r Biocexptpkg("miRcompData")` package. 
+
+To load the raw amplification data:
+```{r load_raw_data}
+library(miRcompData)
+data(miRcompData)
+```
+
+The raw data are organized as follows:
+```{r show_raw_data}
+str(miRcompData)
+```
+
+A new method should take these data as input and produce an expression estimate and quality metric for each feature and each sample. These should be stored in a list with two elements: `ct` containing the expression estimates and `qc` containing the quality metrics. The row and column names should match those in the example data sets (*lifetech* and *qpcRdefault*). 
+
+# Session Info
+```{r session_info}
+sessionInfo()
+```

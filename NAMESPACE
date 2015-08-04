@@ -1,0 +1,13 @@
+importFrom(utils, citation, toBibtex)
+importClassesFrom(Biobase, AnnotatedDataFrame, AssayData, eSet,
+                  ExpressionSet, MIAME, Versioned, VersionedBiobase,
+                  Versions)
+importClassesFrom(methods, character, matrix)
+importMethodsFrom(methods, initialize)
+importMethodsFrom(Biobase, annotatedDataFrameFrom, exprs, se.exprs, "se.exprs<-", annotation, sampleNames)
+
+importFrom(Biobase, assayDataElement, assayDataElementReplace, assayDataNew, pData)
+importFrom(methods, is, callNextMethod, new, setAs, as)
+
+export(accuracy, precision, limitOfDetection, titrationResponse, completeFeatures, qualityAssessment)
+
